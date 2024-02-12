@@ -44,4 +44,4 @@ Use -auto-approve to skip the confirmation prompt:
 ```bash
 terraform destroy -auto-approve
 ```
-Note: Use terraform destroy cautiously, as it irreversibly deletes resources. Only execute this command when you want to tear down the infrastructure.
+Note: Use terraform destroy cautiously, as it irreversibly deletes resources. Only execute this command when you want to tear down the infrastructure
