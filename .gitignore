@@ -35,4 +35,3 @@ terraform.rc
 
 # pycharm
 .idea/
-*.lock.*

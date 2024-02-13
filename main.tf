@@ -21,21 +21,21 @@ resource "google_compute_network" "webapp_vpc" {
 
 resource "google_compute_subnetwork" "webapp" {
   ip_cidr_range = var.webapp_cidr_range
-  name          = "webapp-subnetwork"
+  name          = "webapp"
   network       = google_compute_network.webapp_vpc.id
   region        = var.region
 }
 
 resource "google_compute_subnetwork" "db" {
   ip_cidr_range = var.db_cidr_range
-  name          = "db-subnetwork"
+  name          = "db"
   network       = google_compute_network.webapp_vpc.id
   region        = var.region
 }
 
 resource "google_compute_route" "webapp_subnet_route" {
   dest_range = var.webapp_route
-  name = "webapp-subnetwork-route"
+  name = "webapp-route"
   network = google_compute_network.webapp_vpc.name
   next_hop_gateway = "default-internet-gateway"
 }
