@@ -31,19 +31,23 @@ variable "webapp_route" {
 variable "vpc_name" {
   description = "vpc name"
   type = string
+  default = "webapp-vpc"
 }
 
 variable "webapp_subnet_name" {
   description = "webapp_subnet_name"
   type = string
+  default = "webapp"
 }
 
 variable "db_subnet_name" {
   description = "db_subnet_name"
   type = string
+  default = "db"
 }
 
 variable "vpc_route_name" {
   description = "route name"
   type = string
+  default = "webapp-vpc-route"
 }
