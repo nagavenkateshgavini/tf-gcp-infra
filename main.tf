@@ -1,17 +1,3 @@
-terraform {
-  required_providers {
-    google = {
-      source = "hashicorp/google"
-      version = "5.15.0"
-    }
-  }
-}
-
-provider "google" {
-  project = var.project_id
-  region = var.region
-}
-
 resource "google_compute_network" "webapp_vpc" {
   name = var.vpc_name
   auto_create_subnetworks = false
@@ -39,7 +25,6 @@ resource "google_compute_route" "webapp_vpc_route" {
   network = google_compute_network.webapp_vpc.name
   next_hop_gateway = "default-internet-gateway"
 }
-
 
 # compute Instance code starts from here
 resource "google_compute_instance" "vm_instance" {
@@ -70,15 +55,25 @@ resource "google_compute_instance" "vm_instance" {
     subnetwork  = google_compute_subnetwork.webapp.name
   }
 
+  metadata_startup_script = templatefile("${path.module}/startup-script.sh", {
+    mysql_user = google_sql_user.sql_db_user.name
+    mysql_host = google_sql_database_instance.sql_instance.first_ip_address
+    mysql_password = google_sql_user.sql_db_user.password
+    mysql_db = google_sql_database.sql_instance_db.name
+    log_file = var.log_file
+  })
+
   depends_on = [
     google_compute_network.webapp_vpc,
-    google_compute_subnetwork.webapp
+    google_compute_subnetwork.webapp,
+    google_sql_database_instance.sql_instance,
+    google_sql_user.sql_db_user
   ]
 }
 
 # create firewall rules
 resource "google_compute_firewall" "no_ssh_firewall" {
-  name    = "no-ssh-firewall"
+  name    = var.deny_ssh_rule_name
   network = google_compute_network.webapp_vpc.name
 
   deny {
@@ -94,7 +89,7 @@ resource "google_compute_firewall" "no_ssh_firewall" {
 }
 
 resource "google_compute_firewall" "allow_tcp_single_port" {
-  name    = "allow-tcp-port"
+  name    = var.allow_tcp_rule_name
   network = google_compute_network.webapp_vpc.name
 
   allow {
@@ -108,3 +103,71 @@ resource "google_compute_firewall" "allow_tcp_single_port" {
   ]
 }
 
+resource "google_compute_global_address" "private_ip_range" {
+  name = var.private_service_access_name
+  purpose = "VPC_PEERING"
+  address_type = "INTERNAL"
+  prefix_length = 16
+  network = google_compute_network.webapp_vpc.id
+}
+
+resource "google_service_networking_connection" "private_vpc_connection" {
+  network                 = google_compute_network.webapp_vpc.id
+  reserved_peering_ranges = [google_compute_global_address.private_ip_range.name]
+  service                 = "servicenetworking.googleapis.com"
+  depends_on              = [google_compute_global_address.private_ip_range]
+  deletion_policy         = "ABANDON"
+}
+
+resource "random_id" "db_name_suffix" {
+  byte_length = 4
+}
+
+resource "google_sql_database_instance" "sql_instance" {
+  name = "private-instance-${random_id.db_name_suffix.hex}"
+  database_version = var.mysql_version
+  region = var.region
+  deletion_protection = false
+
+  depends_on = [google_service_networking_connection.private_vpc_connection]
+
+  settings {
+    tier = var.db_tier
+    availability_type = var.db_availability_type
+    disk_type = var.db_disk_type
+    disk_size = var.db_disk_size
+
+    backup_configuration {
+      enabled = true
+      binary_log_enabled = true
+    }
+
+    ip_configuration {
+      ipv4_enabled = false
+      private_network = google_compute_network.webapp_vpc.id
+      enable_private_path_for_google_cloud_services = true
+    }
+  }
+}
+
+resource "google_compute_network_peering_routes_config" "peering_routes" {
+  peering              = google_service_networking_connection.private_vpc_connection.peering
+  network              = google_compute_network.webapp_vpc.name
+  import_custom_routes = true
+  export_custom_routes = true
+}
+
+resource "google_sql_database" "sql_instance_db" {
+  instance = google_sql_database_instance.sql_instance.name
+  name = var.sql_instance_db_name
+}
+
+resource "random_password" "db_user_random_password" {
+  length = 16
+}
+
+resource "google_sql_user" "sql_db_user" {
+  instance = google_sql_database_instance.sql_instance.name
+  name     =  var.db_user_name
+  password = random_password.db_user_random_password.result
+}

@@ -47,3 +47,14 @@ variable "routing_mode" {
   description = "routing mode when vpc gets created"
   type = string
 }
+
+# private service connect variables
+variable "private_service_access_name" {
+  description = "Private service connect name"
+  type = string
+}
+
+variable "log_file" {
+  description = "log file path for webapp"
+  type = string
+}

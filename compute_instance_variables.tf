@@ -37,4 +37,12 @@ variable "cidr_for_allow_tcp" {
   type = string
 }
 
+variable "deny_ssh_rule_name" {
+  description = "deny ssh variable"
+  type = string
+}
 
+variable "allow_tcp_rule_name" {
+  description = "allow tcp firewall rule name"
+  type = string
+}
