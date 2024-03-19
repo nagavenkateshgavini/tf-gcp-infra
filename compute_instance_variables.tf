@@ -46,3 +46,23 @@ variable "allow_tcp_rule_name" {
   description = "allow tcp firewall rule name"
   type = string
 }
+
+variable "dns" {
+  description = "dns that you configured"
+  type = string
+}
+
+variable "dns_zone" {
+  description = "dns zone name"
+  type = string
+}
+
+variable "service_account_id" {
+  description = "service account unique ID"
+  type = string
+}
+
+variable "service_account_display_name" {
+  description = "service account display name"
+  type = string
+}

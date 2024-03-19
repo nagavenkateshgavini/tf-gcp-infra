@@ -63,11 +63,20 @@ resource "google_compute_instance" "vm_instance" {
     log_file = var.log_file
   })
 
+  service_account {
+    email  = google_service_account.webapp_service_account.email
+    scopes = ["cloud-platform"]
+  }
+
+  allow_stopping_for_update = true
+
   depends_on = [
     google_compute_network.webapp_vpc,
     google_compute_subnetwork.webapp,
     google_sql_database_instance.sql_instance,
-    google_sql_user.sql_db_user
+    google_sql_user.sql_db_user,
+    google_project_iam_binding.logging_admin,
+    google_project_iam_binding.monitoring_metric_writer
   ]
 }
 
@@ -103,6 +112,7 @@ resource "google_compute_firewall" "allow_tcp_single_port" {
   ]
 }
 
+# Private service access to create link between VM and Cloud SQL
 resource "google_compute_global_address" "private_ip_range" {
   name = var.private_service_access_name
   purpose = "VPC_PEERING"
@@ -170,4 +180,42 @@ resource "google_sql_user" "sql_db_user" {
   instance = google_sql_database_instance.sql_instance.name
   name     =  var.db_user_name
   password = random_password.db_user_random_password.result
+}
+
+# add or update A record
+resource "google_dns_record_set" "a-record" {
+  name         = var.dns
+  type         = "A"
+  ttl          = 300
+  managed_zone = var.dns_zone
+  rrdatas      = [google_compute_instance.vm_instance.network_interface.0.access_config.0.nat_ip]
+
+  depends_on = [
+    google_compute_instance.vm_instance
+  ]
+}
+
+# Service account creation to create link between ops agent and logs explorer service
+
+resource "google_service_account" "webapp_service_account" {
+  account_id   = var.service_account_id
+  display_name = var.service_account_display_name
+}
+
+resource "google_project_iam_binding" "logging_admin" {
+  project = var.project_id
+  role    = "roles/logging.admin"
+
+  members = [
+    "serviceAccount:${google_service_account.webapp_service_account.email}",
+  ]
+}
+
+resource "google_project_iam_binding" "monitoring_metric_writer" {
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+
+  members = [
+    "serviceAccount:${google_service_account.webapp_service_account.email}",
+  ]
 }

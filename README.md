@@ -1,3 +1,17 @@
+
+The repo holds the terraform configuration for the following functionalities
+
+1. Create VPC(Virtual Private Cloud) network
+1. Create Subnets inside VPC
+1. Create firewall rules like no-ssh and single port expose
+1. Create private service access to connect to cloud sql instance
+1. Add SQL instance private IP, database user, password etc to the VM instance env variables with the 
+help of startup script concept
+1. Set up A record for DNS, which creates a link between DNS name and the VM instance
+1. Setup a service account and attach it to a VM with proper IAM roles like logging writes which helps to send
+logs to the google observability service
+
+-------
 # tf-gcp-infra
 This repo is to manage google cloud platform automatically
 
@@ -45,3 +59,17 @@ Use -auto-approve to skip the confirmation prompt:
 terraform destroy -auto-approve
 ```
 Note: Use terraform destroy cautiously, as it irreversibly deletes resources. Only execute this command when you want to tear down the infrastructure
+
+-----------
+
+Keywords:
+1. VPC
+2. Subnets
+3. Routes
+4. Firewalls
+5. VM
+6. Private Service Access
+7. Service Account
+8. Cloud SQL
+9. Cloud DNS
+10. IAM
