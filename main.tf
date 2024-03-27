@@ -179,6 +179,8 @@ resource "google_sql_database" "sql_instance_db" {
 
 resource "random_password" "db_user_random_password" {
   length = 16
+  special          = true
+  override_special = "!#$%*()-_=+[]{}<>:?"
 }
 
 resource "google_sql_user" "sql_db_user" {
