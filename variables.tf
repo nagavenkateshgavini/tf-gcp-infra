@@ -58,3 +58,58 @@ variable "log_file" {
   description = "log file path for webapp"
   type = string
 }
+
+variable "cloud_function_memory" {
+  description = "memory for your cloud function"
+  type = number
+}
+
+variable "cloud_function_runtime" {
+  description = "Provide runtime for your cloud function code"
+  type = string
+}
+
+variable "cloud_function_name" {
+  description = "Provide cloud function name"
+  type = string
+}
+
+variable "serverless_source_path" {
+  description = "Provide serverless code source path"
+  type = string
+}
+
+variable "serverless_zip_path" {
+  description = "Provide temp path to create archive"
+  type = string
+}
+
+variable "serverless_bucket_name" {
+  description = "Provide bucket name to store serverless code"
+  type = string
+}
+
+variable "bucket_location" {
+  description = "Provide where your bucket should reside"
+  type = string
+}
+
+variable "local_path_to_serverless_code" {
+  description = "Provide local path to your serverless code"
+  type = string
+}
+
+variable "serverless_entrypoint_function_name" {
+  description = "Provide function name of your cloud function"
+  type = string
+}
+
+variable "mailgun_api_key" {
+  description = "Provide mailgun api key to send emails"
+  type = string
+}
+
+variable "mailgun_domain_name" {
+  description = "Provide mailgun domain name"
+  type = string
+}
