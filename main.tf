@@ -59,6 +59,10 @@ resource "google_compute_instance_template" "webapp_instance_template" {
     subnetwork = google_compute_subnetwork.webapp.name
   }
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
   tags = ["webapp"]
 
   service_account {
@@ -121,8 +125,8 @@ resource google_compute_region_autoscaler webapp_autoscaler {
   name = var.autoscalar_policy_name
   region = var.region
   autoscaling_policy {
-    max_replicas = 2
-    min_replicas = 1
+    max_replicas = 6
+    min_replicas = 3
     cooldown_period = 60
     cpu_utilization {
       target = var.autoscalar_cpu_utilization
@@ -211,7 +215,7 @@ resource "google_compute_firewall" "no_ssh_firewall" {
   name    = var.deny_ssh_rule_name
   network = google_compute_network.webapp_vpc.name
 
-  allow {
+  deny {
     protocol = "tcp"
     ports = ["22"]
   }
