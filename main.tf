@@ -34,6 +34,7 @@ resource "random_id" "instance_template_name_suffix" {
 # Instance template
 resource "google_compute_instance_template" "webapp_instance_template" {
   machine_type = var.machine_type
+  name_prefix  = "instance-template-"
 
   disk {
     source_image = var.gci
@@ -78,10 +79,10 @@ resource "google_compute_instance_template" "webapp_instance_template" {
 ## Instance healthcheck
 resource google_compute_health_check webapp_healthcheck {
   name = var.health_check_name
-  check_interval_sec  = 20
-  healthy_threshold   = 3
-  timeout_sec         = 10
-  unhealthy_threshold = 10
+  check_interval_sec  = 5
+  healthy_threshold   = 2
+  timeout_sec         = 5
+  unhealthy_threshold = 2
   http_health_check {
     request_path = var.healthcheck_endpoint
     port         = var.backend_service_port
@@ -210,7 +211,7 @@ resource "google_compute_firewall" "no_ssh_firewall" {
   name    = var.deny_ssh_rule_name
   network = google_compute_network.webapp_vpc.name
 
-  deny {
+  allow {
     protocol = "tcp"
     ports = ["22"]
   }
@@ -286,9 +287,8 @@ resource "google_sql_database" "sql_instance_db" {
 }
 
 resource "random_password" "db_user_random_password" {
-  length = 16
-  special          = true
-  override_special = "!#$%*()-_=+[]{}<>:?"
+  length           = 16
+  special          = false
 }
 
 resource "google_sql_user" "sql_db_user" {
