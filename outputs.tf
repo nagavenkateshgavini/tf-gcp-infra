@@ -1,9 +1,5 @@
-output "client_instance_name" {
-  value = google_compute_instance.vm_instance.name
-}
-
-output "client_instance_zone" {
-  value = google_compute_instance.vm_instance.zone
+output "load_balancer_ip" {
+  value = google_compute_global_address.lb_ip.address
 }
 
 output "sql_ip" {

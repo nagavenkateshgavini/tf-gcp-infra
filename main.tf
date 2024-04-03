@@ -10,6 +10,7 @@ resource "google_compute_subnetwork" "webapp" {
   name          = var.webapp_subnet_name
   network       = google_compute_network.webapp_vpc.id
   region        = var.region
+  private_ip_google_access = true
 }
 
 resource "google_compute_subnetwork" "db" {
@@ -26,36 +27,22 @@ resource "google_compute_route" "webapp_vpc_route" {
   next_hop_gateway = "default-internet-gateway"
 }
 
-# compute Instance code starts from here
-resource "google_compute_instance" "vm_instance" {
-    boot_disk {
-      initialize_params {
-        image = var.gci
-        size  = var.instance_disk_size
-        type  = var.instance_disk_type
-      }
-      mode = "READ_WRITE"
-  }
+resource "random_id" "instance_template_name_suffix" {
+  byte_length = 4
+}
 
-
+# Instance template
+resource "google_compute_instance_template" "webapp_instance_template" {
   machine_type = var.machine_type
-  name         = var.instance_name
 
-  zone = var.instance_zone
-  tags = ["webapp"]
-
-  network_interface {
-    access_config {
-      network_tier = "PREMIUM"
-    }
-
-    queue_count = 0
-    stack_type  = "IPV4_ONLY"
-    network = google_compute_network.webapp_vpc.name
-    subnetwork  = google_compute_subnetwork.webapp.name
+  disk {
+    source_image = var.gci
+    disk_type = var.instance_disk_type
+    disk_size_gb = var.instance_disk_size
+    mode = "READ_WRITE"
   }
 
-  metadata_startup_script = templatefile("${path.module}/startup-script.sh", {
+    metadata_startup_script = templatefile("${path.module}/startup-script.sh", {
     mysql_user = google_sql_user.sql_db_user.name
     mysql_host = google_sql_database_instance.sql_instance.first_ip_address
     mysql_password = google_sql_user.sql_db_user.password
@@ -65,12 +52,18 @@ resource "google_compute_instance" "vm_instance" {
     gcp_pubsub_topic_id = google_pubsub_topic.webapp_pubsub.name
   })
 
-  service_account {
-    email  = google_service_account.webapp_service_account.email
-    scopes = ["cloud-platform", "https://www.googleapis.com/auth/pubsub"]
+
+  network_interface {
+    network = google_compute_network.webapp_vpc.name
+    subnetwork = google_compute_subnetwork.webapp.name
   }
 
-  allow_stopping_for_update = true
+  tags = ["webapp"]
+
+  service_account {
+    email  = google_service_account.webapp_service_account.email
+    scopes = ["cloud-platform", "pubsub"]
+  }
 
   depends_on = [
     google_compute_network.webapp_vpc,
@@ -80,6 +73,136 @@ resource "google_compute_instance" "vm_instance" {
     google_project_iam_binding.logging_admin,
     google_project_iam_binding.monitoring_metric_writer
   ]
+}
+
+## Instance healthcheck
+resource google_compute_health_check webapp_healthcheck {
+  name = var.health_check_name
+  check_interval_sec  = 20
+  healthy_threshold   = 3
+  timeout_sec         = 10
+  unhealthy_threshold = 10
+  http_health_check {
+    request_path = var.healthcheck_endpoint
+    port         = var.backend_service_port
+  }
+  log_config {
+    enable = true
+  }
+}
+
+# Instance group manager
+resource google_compute_region_instance_group_manager webapp_instance_group_manager {
+  base_instance_name = var.base_instance_name
+  name = var.instance_name
+
+  version {
+    name = "webapp-user-auth"
+    instance_template = google_compute_instance_template.webapp_instance_template.id
+  }
+
+  auto_healing_policies {
+    health_check      = google_compute_health_check.webapp_healthcheck.id
+    initial_delay_sec = 300
+  }
+
+  named_port {
+    name = "webapp-service-port"
+    port = var.backend_service_port
+  }
+
+  depends_on = [google_compute_instance_template.webapp_instance_template]
+  wait_for_instances = true
+}
+
+# Instance autoscaling policy
+resource google_compute_region_autoscaler webapp_autoscaler {
+  name = var.autoscalar_policy_name
+  region = var.region
+  autoscaling_policy {
+    max_replicas = 2
+    min_replicas = 1
+    cooldown_period = 60
+    cpu_utilization {
+      target = var.autoscalar_cpu_utilization
+    }
+  }
+  target = google_compute_region_instance_group_manager.webapp_instance_group_manager.id
+  depends_on = [
+    google_compute_region_instance_group_manager.webapp_instance_group_manager
+  ]
+}
+
+# Ingress firewall rule for healthcheck
+resource "google_compute_firewall" "default" {
+  name          = var.fw_allow_health_check_name
+  direction     = "INGRESS"
+  network       = google_compute_network.webapp_vpc.id
+  priority      = 1000
+  source_ranges = ["130.211.0.0/22", "35.191.0.0/16"]
+  target_tags   = ["webapp"]
+
+  allow {
+    ports    = [var.backend_service_port]
+    protocol = "tcp"
+  }
+}
+
+# global external load balancer
+
+## create ip address
+resource "google_compute_global_address" "lb_ip" {
+  name       = var.lb_ip_address_name
+  ip_version = "IPV4"
+}
+
+## create backend service
+resource "google_compute_backend_service" "webapp_backend" {
+  name = var.backend_service_name
+  backend {
+    group = google_compute_region_instance_group_manager.webapp_instance_group_manager.instance_group
+  }
+
+  health_checks = [google_compute_health_check.webapp_healthcheck.id]
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  locality_lb_policy = var.lb_policy
+  port_name = "webapp-service-port"
+}
+
+## create url map
+resource "google_compute_url_map" "webapp_url_map" {
+  name = var.url_map_name
+  default_service = google_compute_backend_service.webapp_backend.id
+}
+
+## create https proxy
+resource "google_compute_target_https_proxy" "lb_https_proxy" {
+  name     = var.https_proxy_name
+  url_map  = google_compute_url_map.webapp_url_map.id
+  ssl_certificates = [
+    google_compute_managed_ssl_certificate.lb_ssl.id
+  ]
+  depends_on = [
+    google_compute_managed_ssl_certificate.lb_ssl
+  ]
+}
+
+## create forwarding rule
+resource "google_compute_global_forwarding_rule" "default" {
+  name                  = var.forwarding_rule_name
+  ip_protocol           = "TCP"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  port_range            = "443"
+  target                = google_compute_target_https_proxy.lb_https_proxy.id
+  ip_address            = google_compute_global_address.lb_ip.id
+}
+
+## create ssl certificate
+resource "google_compute_managed_ssl_certificate" "lb_ssl" {
+  name = var.ssl_cert_name
+  managed {
+    domains = [var.domain_name]
+  }
 }
 
 # create firewall rules
@@ -97,21 +220,6 @@ resource "google_compute_firewall" "no_ssh_firewall" {
   ]
 
   source_ranges = [var.cidr_for_nossh]
-}
-
-resource "google_compute_firewall" "allow_tcp_single_port" {
-  name    = var.allow_tcp_rule_name
-  network = google_compute_network.webapp_vpc.name
-
-  allow {
-    protocol = "tcp"
-    ports = ["8000"]
-  }
-
-  source_ranges = [var.cidr_for_allow_tcp]
-  target_tags = [
-    "webapp"
-  ]
 }
 
 # Private service access to create link between VM and Cloud SQL
@@ -195,10 +303,12 @@ resource "google_dns_record_set" "a-record" {
   type         = "A"
   ttl          = 300
   managed_zone = var.dns_zone
-  rrdatas      = [google_compute_instance.vm_instance.network_interface.0.access_config.0.nat_ip]
+  rrdatas = [google_compute_global_address.lb_ip.address]
 
   depends_on = [
-    google_compute_instance.vm_instance
+    google_compute_backend_service.webapp_backend,
+    google_compute_global_address.lb_ip,
+    google_compute_target_https_proxy.lb_https_proxy
   ]
 }
 
@@ -306,7 +416,7 @@ resource "google_cloudfunctions_function" "function" {
     MYSQL_HOST = google_sql_database_instance.sql_instance.first_ip_address
 
     MAILGUN_API_KEY = var.mailgun_api_key
-    MAILGUN_DOMAIN = var.mailgun_domain_name
+    MAILGUN_DOMAIN = var.domain_name
   }
 
   service_account_email = google_service_account.webapp_service_account.email

@@ -109,7 +109,82 @@ variable "mailgun_api_key" {
   type = string
 }
 
-variable "mailgun_domain_name" {
-  description = "Provide mailgun domain name"
+variable "domain_name" {
+  description = "Provide domain name"
+  type = string
+}
+
+variable "instance_template_name" {
+  description = "Compute instance template name"
+  type = string
+}
+
+variable "health_check_name" {
+  description = "Pass the healthcheck name"
+  type = string
+}
+
+variable "healthcheck_endpoint" {
+  description = "healthcheck endpoint"
+  type = string
+}
+
+variable "backend_service_port" {
+  description = "Backend service port number"
+  type = string
+}
+
+variable "base_instance_name" {
+  description = "base_instance_name"
+  type = string
+}
+
+variable "autoscalar_policy_name" {
+  description = "autoscalar_policy_name"
+  type = string
+}
+
+variable "autoscalar_cpu_utilization" {
+  description = "autoscalar_cpu_utilization"
+  type = number
+}
+
+variable "fw_allow_health_check_name" {
+  description = "fw_allow_health_check_name"
+  type = string
+}
+
+variable "lb_ip_address_name" {
+  description = "lb_ip_address_name"
+  type = string
+}
+
+variable "backend_service_name" {
+  description = "backend_service_name"
+  type = string
+}
+
+variable "lb_policy" {
+  description = "lb_policy"
+  type = string
+}
+
+variable "url_map_name" {
+  description = "url map name"
+  type = string
+}
+
+variable "https_proxy_name" {
+  description = "https_proxy_name"
+  type = string
+}
+
+variable "forwarding_rule_name" {
+  description = "forwarding rule name"
+  type = string
+}
+
+variable "ssl_cert_name" {
+  description = "ssl_cert_name"
   type = string
 }
