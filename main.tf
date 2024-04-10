@@ -41,6 +41,9 @@ resource "google_compute_instance_template" "webapp_instance_template" {
     disk_type = var.instance_disk_type
     disk_size_gb = var.instance_disk_size
     mode = "READ_WRITE"
+    disk_encryption_key {
+      kms_key_self_link = google_kms_crypto_key.vm_key.id
+    }
   }
 
     metadata_startup_script = templatefile("${path.module}/startup-script.sh", {
@@ -257,7 +260,13 @@ resource "google_sql_database_instance" "sql_instance" {
   region = var.region
   deletion_protection = false
 
-  depends_on = [google_service_networking_connection.private_vpc_connection]
+  encryption_key_name = google_kms_crypto_key.cloudsql_key.id
+  depends_on = [
+    google_service_networking_connection.private_vpc_connection,
+    google_kms_crypto_key.cloudsql_key,
+    google_project_service_identity.gcp_kms_sa,
+    google_kms_crypto_key_iam_binding.cloud_sql_key_binding
+  ]
 
   settings {
     tier = var.db_tier
@@ -384,10 +393,20 @@ data "archive_file" "source_code" {
   output_path = var.serverless_zip_path
 }
 
+data "google_storage_project_service_account" "gcs_account" {
+}
+
 # Bucket creation before cloud function
 resource "google_storage_bucket" "serverless_bucket" {
   name = var.serverless_bucket_name
   location = var.bucket_location
+  encryption {
+    default_kms_key_name = google_kms_crypto_key.storage_bucket_key.id
+  }
+
+  depends_on = [
+    google_kms_crypto_key_iam_binding.storage_bucket_binding
+  ]
 }
 
 resource "google_storage_bucket_object" "archive" {
@@ -431,4 +450,65 @@ resource "google_cloudfunctions_function" "function" {
     google_storage_bucket_object.archive
   ]
   vpc_connector = google_vpc_access_connector.cfunc2cloudsql_connector.id
+}
+
+# CKMS key creation for VM, Cloud SQL and Bucket
+resource "google_kms_key_ring" "webapp_kms_keyring" {
+  provider = google-beta
+  name     = "webapp-kms-keyring8"
+  location = var.region
+}
+
+resource "google_project_service_identity" "gcp_kms_sa" {
+  provider = google-beta
+  service  = "sqladmin.googleapis.com"
+}
+
+# VM KMS key
+resource "google_kms_crypto_key" "vm_key" {
+  provider = google-beta
+  name     = "vm-key"
+  key_ring = google_kms_key_ring.webapp_kms_keyring.id
+  rotation_period = "2592000s"
+}
+
+# Cloud SQL KMS Key
+resource "google_kms_crypto_key" "cloudsql_key" {
+  provider = google-beta
+  name     = "cloudsql-key"
+  key_ring = google_kms_key_ring.webapp_kms_keyring.id
+  rotation_period = "2592000s"
+}
+
+# Storage bucket KMS key
+resource "google_kms_crypto_key" "storage_bucket_key" {
+  provider = google-beta
+  name     = "storage-bucket-key"
+  key_ring = google_kms_key_ring.webapp_kms_keyring.id
+  rotation_period = "2592000s"
+}
+
+# I AM bindings for kms service accounts with the kms keys
+resource "google_kms_crypto_key_iam_binding" "vm_key_binding" {
+  crypto_key_id = google_kms_crypto_key.vm_key.id
+  members       = [
+    "serviceAccount:service-143741726112@compute-system.iam.gserviceaccount.com"
+  ]
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+}
+
+resource "google_kms_crypto_key_iam_binding" "cloud_sql_key_binding" {
+  crypto_key_id = google_kms_crypto_key.cloudsql_key.id
+  members       = [
+    "serviceAccount:${google_project_service_identity.gcp_kms_sa.email}"
+  ]
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+}
+
+resource "google_kms_crypto_key_iam_binding" "storage_bucket_binding" {
+  crypto_key_id = google_kms_crypto_key.storage_bucket_key.id
+  members       = [
+    "serviceAccount:service-143741726112@gs-project-accounts.iam.gserviceaccount.com"
+  ]
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
 }
