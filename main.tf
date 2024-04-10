@@ -129,7 +129,7 @@ resource google_compute_region_autoscaler webapp_autoscaler {
   region = var.region
   autoscaling_policy {
     max_replicas = 6
-    min_replicas = 3
+    min_replicas = 4
     cooldown_period = 60
     cpu_utilization {
       target = var.autoscalar_cpu_utilization
@@ -455,7 +455,7 @@ resource "google_cloudfunctions_function" "function" {
 # CKMS key creation for VM, Cloud SQL and Bucket
 resource "google_kms_key_ring" "webapp_kms_keyring" {
   provider = google-beta
-  name     = "webapp-kms-keyring8"
+  name     = var.key_ring_name
   location = var.region
 }
 

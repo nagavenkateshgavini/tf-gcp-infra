@@ -188,3 +188,8 @@ variable "ssl_cert_name" {
   description = "ssl_cert_name"
   type = string
 }
+
+variable "key_ring_name" {
+  description = "provide key ring name"
+  type = string
+}
